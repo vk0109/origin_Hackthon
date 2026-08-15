@@ -1,4 +1,4 @@
-function CTA() {
+function CTA({ onJoin }) {
   return (
     <section
       id="contact"
@@ -34,7 +34,7 @@ function CTA() {
             Request Help ↗
           </button>
 
-          <button className="rounded-lg border border-white/30 bg-white/10 px-6 py-4 text-sm font-bold text-white backdrop-blur transition hover:bg-white/20">
+          <button onClick={onJoin} className="rounded-lg border border-white/30 bg-white/10 px-6 py-4 text-sm font-bold text-white backdrop-blur transition hover:bg-white/20">
             Join the Network
           </button>
         </div>

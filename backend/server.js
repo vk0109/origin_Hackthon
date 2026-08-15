@@ -1,39 +1,62 @@
 const dns = require("dns");
-dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
-const dotenv = require("dotenv");
+dns.setServers([
+  "8.8.8.8",
+  "8.8.4.4",
+]);
 
-// dotenv SABSE PEHLE load karo
-dotenv.config();
+require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
 
 const connectDB = require("./config/db");
 
-
-// const adminRoutes = require("./routes/adminRoutes");
+const authRoutes = require("./routes/authRoutes");
 
 const app = express();
 
-// Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: ["http://localhost:5175", "http://localhost:5173"],
+    credentials: true,
+  })
+);
+
 app.use(express.json());
 
-// Database
+// Simple request logger to help debug the auth flow
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
+  next();
+});
+
 connectDB();
 
-
-
-// Test Route
 app.get("/", (req, res) => {
   res.json({
-    message: "Disaster Relief Resource Management API is running 🚨",
+    message: "ResQ Backend is running",
   });
+});
+
+app.use("/api/auth", authRoutes);
+
+// Fallback for unknown API routes - return JSON instead of default HTML
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ message: 'API route not found' });
+  }
+  next();
+});
+
+// Generic error handler
+app.use((err, req, res, next) => {
+  console.error('Unhandled server error:', err);
+  res.status(500).json({ message: 'Server error' });
 });
 
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`ResQ Backend running on port ${PORT}`);
 });
