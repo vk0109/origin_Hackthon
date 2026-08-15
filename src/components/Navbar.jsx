@@ -28,51 +28,59 @@ function Navbar() {
         </a>
 
         {/* ================= NAVIGATION ================= */}
-        <div className="hidden items-center gap-8 md:flex">
+       {/* Navigation */}
+<div className="hidden items-center gap-8 md:flex">
 
-          <a
-            href="#home"
-            className="text-sm font-medium text-white transition duration-300 hover:text-[#d9ff4f]"
-          >
-            Home
-          </a>
+  <a
+    href="/"
+    className="text-sm font-medium text-white transition hover:text-[#d9ff4f]"
+  >
+    Home
+  </a>
 
-          <a
-            href="#mission"
-            className="text-sm font-medium text-gray-400 transition duration-300 hover:text-[#d9ff4f]"
-          >
-            Mission
-          </a>
+  <a
+    href="/#mission"
+    className="text-sm font-medium text-gray-400 transition hover:text-[#d9ff4f]"
+  >
+    Mission
+  </a>
 
-          <a
-            href="#disasters"
-            className="text-sm font-medium text-gray-400 transition duration-300 hover:text-[#d9ff4f]"
-          >
-            Disasters
-          </a>
+  <a
+    href="/#disasters"
+    className="text-sm font-medium text-gray-400 transition hover:text-[#d9ff4f]"
+  >
+    Disasters
+  </a>
 
-          <a
-            href="#how-it-works"
-            className="text-sm font-medium text-gray-400 transition duration-300 hover:text-[#d9ff4f]"
-          >
-            How It Works
-          </a>
+  <a
+    href="/#how-it-works"
+    className="text-sm font-medium text-gray-400 transition hover:text-[#d9ff4f]"
+  >
+    How It Works
+  </a>
 
-          <a
-            href="#resources"
-            className="text-sm font-medium text-gray-400 transition duration-300 hover:text-[#d9ff4f]"
-          >
-            Resources
-          </a>
+  <a
+    href="/#resources"
+    className="text-sm font-medium text-gray-400 transition hover:text-[#d9ff4f]"
+  >
+    Resources
+  </a>
 
-          <a
-            href="#contact"
-            className="text-sm font-medium text-gray-400 transition duration-300 hover:text-[#d9ff4f]"
-          >
-            Contact
-          </a>
+  <a
+    href="#reviews"
+    className="text-sm font-medium text-gray-400 transition hover:text-[#d9ff4f]"
+  >
+    Reviews
+  </a>
 
-        </div>
+  <a
+    href="/#contact"
+    className="text-sm font-medium text-gray-400 transition hover:text-[#d9ff4f]"
+  >
+    Contact
+  </a>
+
+</div>
 
         {/* ================= GET STARTED ================= */}
         <button
