@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Play, X, Quote, ArrowUpRight } from "lucide-react";
+import { X, Quote, ArrowUpRight } from "lucide-react";
 
 function Reviews() {
   const [selected, setSelected] = useState(null);

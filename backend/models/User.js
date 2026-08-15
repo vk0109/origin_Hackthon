@@ -12,6 +12,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      default: "ResQ User",
     },
 
     email: {
@@ -35,7 +36,23 @@ const userSchema = new mongoose.Schema(
     role: {
       type: String,
       enum: ["CITIZEN", "VOLUNTEER"],
+      default: "CITIZEN",
       required: true,
+    },
+
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    authProvider: {
+      type: String,
+      default: "password",
+    },
+
+    avatar: {
+      type: String,
+      default: "",
     },
   },
   {

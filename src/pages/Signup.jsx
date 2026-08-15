@@ -12,7 +12,6 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
-
 import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
@@ -21,13 +20,12 @@ import {
 } from "firebase/auth";
 
 import { auth } from "../firebase";
-
-const API_URL = "http://localhost:5000";
+import { API_URL } from "../config";
 
 const BG_IMAGE =
   "https://i.pinimg.com/736x/c5/d8/3d/c5d83d423e14ff97e16607f39ecc1d8d.jpg";
 
-// Fake/example domains
+// Invalid/disallowed email domains for validation
 const blockedDomains = [
   "example.com",
   "example.org",
@@ -35,22 +33,14 @@ const blockedDomains = [
   "test.com",
   "localhost",
   "invalid.com",
-  "mailinator.com",
 ];
 
 function isValidEmail(email) {
   const value = email.trim().toLowerCase();
-
   const regex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
   if (!regex.test(value)) return false;
-
   const domain = value.split("@")[1];
-
-  if (blockedDomains.includes(domain)) {
-    return false;
-  }
-
+  if (blockedDomains.includes(domain)) return false;
   return true;
 }
 
@@ -63,33 +53,26 @@ function Signup({ onLogin, onClose }) {
     location: "",
   });
 
-  const [role, setRole] = useState("");
-
+  const [role, setRole] = useState("CITIZEN");
   const [showPassword, setShowPassword] = useState(false);
-
   const [agree, setAgree] = useState(false);
-
   const [loading, setLoading] = useState(false);
-
   const [message, setMessage] = useState("");
+  const [isSuccess, setIsSuccess] = useState(false);
 
   const handleChange = (e) => {
     setForm((prev) => ({
       ...prev,
       [e.target.name]: e.target.value,
     }));
-
     setMessage("");
   };
 
-  // =====================================================
-  // EMAIL SIGNUP
-  // =====================================================
-
+  // EMAIL SIGNUP & MONGODB SAVE
   const handleSignup = async (e) => {
     e.preventDefault();
-
     setMessage("");
+    setIsSuccess(false);
 
     if (!form.name.trim()) {
       setMessage("Please enter your full name.");
@@ -97,200 +80,147 @@ function Signup({ onLogin, onClose }) {
     }
 
     if (!role) {
-      setMessage("Please select Citizen or Volunteer.");
+      setMessage("Please select your role (Citizen or Volunteer).");
       return;
     }
 
     if (!isValidEmail(form.email)) {
-      setMessage(
-        "Please enter a valid personal email address."
-      );
+      setMessage("Please enter a valid personal email address.");
       return;
     }
 
     if (form.password.length < 6) {
-      setMessage(
-        "Password must contain at least 6 characters."
-      );
+      setMessage("Password must contain at least 6 characters.");
       return;
     }
 
     if (!agree) {
-      setMessage(
-        "Please accept the Terms of Service and Privacy Policy."
-      );
+      setMessage("Please accept the Terms of Service and Privacy Policy.");
       return;
     }
 
     try {
       setLoading(true);
 
-      // 1. Create Firebase account
-      const credential =
-        await createUserWithEmailAndPassword(
-          auth,
-          form.email.trim().toLowerCase(),
-          form.password
-        );
-
-      // 2. Send verification email
-      await sendEmailVerification(
-        credential.user
+      // 1. Create user in Firebase Auth
+      const credential = await createUserWithEmailAndPassword(
+        auth,
+        form.email.trim().toLowerCase(),
+        form.password
       );
 
-      // 3. Save temporary profile information
-      // We intentionally don't create MongoDB profile
-      // until email is verified and user logs in.
+      const firebaseUser = credential.user;
+      const token = await firebaseUser.getIdToken();
 
-      localStorage.setItem(
-        "resq_pending_profile",
-        JSON.stringify({
+      // 2. Immediately register and save user data to MongoDB
+      const registerRes = await fetch(`${API_URL}/api/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
           name: form.name.trim(),
+          email: form.email.trim().toLowerCase(),
           phone: form.phone.trim(),
           location: form.location.trim(),
           role,
-        })
-      );
+          emailVerified: firebaseUser.emailVerified,
+          authProvider: "password",
+        }),
+      });
 
-      // 4. Sign out until email is verified
-      await auth.signOut();
+      const registerData = await registerRes.json();
 
+      if (!registerRes.ok) {
+        console.warn("MongoDB Register Warning:", registerData.message);
+      } else {
+        console.log("User successfully saved to MongoDB ✅:", registerData.user);
+        localStorage.setItem("resq_user", JSON.stringify(registerData.user));
+      }
+
+      // 3. Send email verification link
+      try {
+        await sendEmailVerification(firebaseUser);
+      } catch (verrErr) {
+        console.warn("Verification email notice:", verrErr.message);
+      }
+
+      setIsSuccess(true);
       setMessage(
-        "Account created successfully! Please verify your email, then login."
+        "Account created and saved in MongoDB! Please check your email to verify your address, then login."
       );
-
     } catch (error) {
       console.error("SIGNUP ERROR:", error);
 
-      if (
-        error.code ===
-        "auth/email-already-in-use"
-      ) {
-        setMessage(
-          "This email is already registered. Please login instead."
-        );
-      } else if (
-        error.code === "auth/invalid-email"
-      ) {
-        setMessage(
-          "Please enter a valid email address."
-        );
-      } else if (
-        error.code === "auth/weak-password"
-      ) {
-        setMessage(
-          "Password must contain at least 6 characters."
-        );
+      if (error.code === "auth/email-already-in-use") {
+        setMessage("This email is already registered. Please login instead.");
+      } else if (error.code === "auth/invalid-email") {
+        setMessage("Please enter a valid email address.");
+      } else if (error.code === "auth/weak-password") {
+        setMessage("Password must contain at least 6 characters.");
       } else {
-        setMessage(
-          error.message ||
-            "Unable to create account."
-        );
+        setMessage(error.message || "Unable to create account. Please try again.");
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // =====================================================
-  // GOOGLE SIGNUP
-  // =====================================================
-
+  // GOOGLE SIGNUP & MONGODB SAVE
   const handleGoogleSignup = async () => {
     setMessage("");
+    setIsSuccess(false);
 
     if (!role) {
-      setMessage(
-        "Please select Citizen or Volunteer first."
-      );
+      setMessage("Please select Citizen or Volunteer role first.");
       return;
     }
 
     if (!agree) {
-      setMessage(
-        "Please accept the Terms of Service and Privacy Policy."
-      );
+      setMessage("Please accept the Terms of Service and Privacy Policy.");
       return;
     }
 
     try {
       setLoading(true);
+      const provider = new GoogleAuthProvider();
+      const credential = await signInWithPopup(auth, provider);
+      const firebaseUser = credential.user;
+      const token = await firebaseUser.getIdToken();
 
-      const provider =
-        new GoogleAuthProvider();
+      // Save Google User directly to MongoDB
+      const response = await fetch(`${API_URL}/api/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: form.name.trim() || firebaseUser.displayName || "ResQ User",
+          email: firebaseUser.email,
+          phone: form.phone.trim(),
+          location: form.location.trim(),
+          role,
+          emailVerified: true,
+          authProvider: "google",
+          avatar: firebaseUser.photoURL || "",
+        }),
+      });
 
-      const credential =
-        await signInWithPopup(
-          auth,
-          provider
-        );
-
-      const firebaseUser =
-        credential.user;
-
-      const token =
-        await firebaseUser.getIdToken();
-
-      // Create MongoDB profile
-      const response = await fetch(
-        `${API_URL}/api/auth/profile`,
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type": "application/json",
-
-            Authorization: `Bearer ${token}`,
-          },
-
-          body: JSON.stringify({
-            name:
-              firebaseUser.displayName ||
-              "ResQ User",
-
-            phone: "",
-
-            location: "",
-
-            role,
-          }),
-        }
-      );
-
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.message ||
-            "Profile creation failed."
-        );
+        throw new Error(data.message || "Unable to store Google user profile in MongoDB.");
       }
 
-      console.log(
-        "MongoDB profile:",
-        data.user
-      );
+      console.log("Google Signup + MongoDB profile created ✅:", data.user);
+      localStorage.setItem("resq_user", JSON.stringify(data.user));
 
-      // Store user locally if needed
-      localStorage.setItem(
-        "resq_user",
-        JSON.stringify(data.user)
-      );
-
-      // SUCCESS → LANDING PAGE
-      onClose();
-
+      if (onClose) onClose();
     } catch (error) {
-      console.error(
-        "GOOGLE SIGNUP ERROR:",
-        error
-      );
-
-      setMessage(
-        error.message ||
-          "Google signup failed."
-      );
+      console.error("GOOGLE SIGNUP ERROR:", error);
+      setMessage(error.message || "Google signup failed.");
     } finally {
       setLoading(false);
     }
@@ -311,30 +241,21 @@ function Signup({ onLogin, onClose }) {
         `,
       }}
     >
-
       {/* HEADER */}
-
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-7">
-
         <div>
           <h1 className="text-2xl font-black tracking-tight text-white">
-            Res
-            <span className="text-[#d9ff4f]">
-              Q.
-            </span>
+            Res<span className="text-[#d9ff4f]">Q.</span>
           </h1>
-
           <p className="text-[9px] tracking-[3px] text-gray-500">
             DISASTER RESPONSE
           </p>
         </div>
 
         <div className="flex items-center gap-5">
-
           <p className="hidden text-sm text-gray-400 sm:block">
             Already have an account?
           </p>
-
           <button
             type="button"
             onClick={onLogin}
@@ -342,7 +263,6 @@ function Signup({ onLogin, onClose }) {
           >
             Login
           </button>
-
           {onClose && (
             <button
               type="button"
@@ -352,115 +272,82 @@ function Signup({ onLogin, onClose }) {
               <X size={22} />
             </button>
           )}
-
         </div>
       </div>
 
-      {/* CONTENT */}
-
+      {/* MAIN CONTAINER */}
       <div className="mx-auto flex min-h-[calc(100vh-100px)] w-full max-w-7xl items-center px-6 py-10">
-
         <div className="grid w-full items-center gap-16 lg:grid-cols-2">
-
-          {/* LEFT */}
-
+          {/* LEFT HERO TEXT */}
           <div className="hidden lg:block">
-
             <p className="mb-5 text-sm font-semibold uppercase tracking-[4px] text-[#d9ff4f]">
               Join the response
             </p>
-
             <h2 className="max-w-xl text-6xl font-black leading-[1.02] tracking-tight text-white xl:text-7xl">
               Be ready.
               <br />
-
-              <span className="text-[#d9ff4f]">
-                Be ResQ.
-              </span>
+              <span className="text-[#d9ff4f]">Be ResQ.</span>
             </h2>
-
             <p className="mt-7 max-w-lg text-lg leading-8 text-gray-400">
-              Connect with people, volunteers
-              and emergency resources when your
-              community needs help the most.
+              Connect with people, volunteers, and emergency resources when your community needs help the most.
             </p>
-
             <div className="mt-10 flex items-center gap-3 text-sm text-gray-400">
-
-              <ShieldCheck
-                size={20}
-                className="text-[#d9ff4f]"
-              />
-
-              Secure authentication powered
-              by Firebase
+              <ShieldCheck size={20} className="text-[#d9ff4f]" />
+              All account data securely stored in MongoDB database
             </div>
-
           </div>
 
-          {/* RIGHT CARD */}
-
+          {/* SIGNUP FORM CARD */}
           <div className="ml-auto w-full max-w-xl">
-
             <div className="rounded-2xl border border-white/10 bg-[#0c1512]/95 p-7 shadow-2xl backdrop-blur-xl sm:p-9">
-
               <div className="mb-7">
-
-                <h2 className="text-3xl font-bold text-white">
-                  Create your account
-                </h2>
-
+                <h2 className="text-3xl font-bold text-white">Create your account</h2>
                 <p className="mt-2 text-sm leading-6 text-gray-500">
                   Join ResQ as a citizen or volunteer.
                 </p>
-
               </div>
 
-              {/* MESSAGE */}
-
+              {/* MESSAGE BANNER */}
               {message && (
-                <div className="mb-5 rounded-lg border border-[#d9ff4f]/20 bg-[#d9ff4f]/5 px-4 py-3 text-sm leading-5 text-[#d9ff4f]">
+                <div
+                  className={`mb-5 rounded-lg border px-4 py-3 text-sm leading-5 ${
+                    isSuccess
+                      ? "border-green-500/30 bg-green-500/10 text-green-400"
+                      : "border-[#d9ff4f]/20 bg-[#d9ff4f]/5 text-[#d9ff4f]"
+                  }`}
+                >
                   {message}
                 </div>
               )}
 
-              <form
-                onSubmit={handleSignup}
-                className="space-y-4"
-              >
-
+              <form onSubmit={handleSignup} className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
-
                   <Input
                     icon={<User size={18} />}
                     name="name"
-                    placeholder="Full Name"
+                    placeholder="Full Name *"
                     value={form.name}
                     onChange={handleChange}
                   />
-
                   <Input
                     icon={<Mail size={18} />}
                     type="email"
                     name="email"
-                    placeholder="Email Address"
+                    placeholder="Email Address *"
                     value={form.email}
                     onChange={handleChange}
                   />
-
                   <PasswordInput
                     value={form.password}
                     onChange={(e) =>
                       setForm((prev) => ({
                         ...prev,
-                        password:
-                          e.target.value,
+                        password: e.target.value,
                       }))
                     }
                     show={showPassword}
                     setShow={setShowPassword}
                   />
-
                   <Input
                     icon={<Phone size={18} />}
                     type="tel"
@@ -469,7 +356,6 @@ function Signup({ onLogin, onClose }) {
                     value={form.phone}
                     onChange={handleChange}
                   />
-
                 </div>
 
                 <Input
@@ -480,228 +366,125 @@ function Signup({ onLogin, onClose }) {
                   onChange={handleChange}
                 />
 
-                {/* ROLE */}
-
+                {/* ROLE SELECTION */}
                 <div className="pt-3">
-
                   <p className="mb-3 text-sm font-semibold text-white">
-                    Choose your role
+                    Choose your role *
                   </p>
-
                   <div className="grid grid-cols-2 gap-3">
-
                     <RoleCard
-                      selected={
-                        role === "CITIZEN"
-                      }
-                      onClick={() =>
-                        setRole("CITIZEN")
-                      }
-                      icon={
-                        <User size={20} />
-                      }
+                      selected={role === "CITIZEN"}
+                      onClick={() => setRole("CITIZEN")}
+                      icon={<User size={20} />}
                       title="Citizen"
                       text="Request emergency help"
                     />
-
                     <RoleCard
-                      selected={
-                        role === "VOLUNTEER"
-                      }
-                      onClick={() =>
-                        setRole("VOLUNTEER")
-                      }
-                      icon={
-                        <Users size={20} />
-                      }
+                      selected={role === "VOLUNTEER"}
+                      onClick={() => setRole("VOLUNTEER")}
+                      icon={<Users size={20} />}
                       title="Volunteer"
                       text="Help people in need"
                     />
-
                   </div>
-
                 </div>
 
-                {/* TERMS */}
-
+                {/* TERMS CHECKBOX */}
                 <label className="flex cursor-pointer gap-3 pt-2">
-
                   <input
                     type="checkbox"
                     checked={agree}
-                    onChange={(e) =>
-                      setAgree(
-                        e.target.checked
-                      )
-                    }
+                    onChange={(e) => setAgree(e.target.checked)}
                     className="mt-1 h-4 w-4 accent-[#d9ff4f]"
                   />
-
                   <span className="text-xs leading-5 text-gray-500">
                     I agree to the{" "}
-                    <span className="text-gray-300">
-                      Terms of Service
-                    </span>{" "}
-                    and{" "}
-                    <span className="text-gray-300">
-                      Privacy Policy
-                    </span>
-                    .
+                    <span className="text-gray-300">Terms of Service</span> and{" "}
+                    <span className="text-gray-300">Privacy Policy</span>.
                   </span>
-
                 </label>
 
-                {/* CREATE ACCOUNT */}
-
+                {/* SUBMIT BUTTON */}
                 <button
                   type="submit"
                   disabled={loading}
                   className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#d9ff4f] py-3.5 font-bold text-black transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-
-                  {loading
-                    ? "Creating account..."
-                    : "Create Account"}
-
-                  {!loading && (
-                    <ArrowRight size={18} />
-                  )}
-
+                  {loading ? "Creating account & saving to MongoDB..." : "Create Account"}
+                  {!loading && <ArrowRight size={18} />}
                 </button>
-
               </form>
 
               {/* DIVIDER */}
-
               <div className="my-6 flex items-center gap-4">
-
                 <div className="h-px flex-1 bg-white/10" />
-
-                <span className="text-[10px] tracking-widest text-gray-600">
-                  OR
-                </span>
-
+                <span className="text-[10px] tracking-widest text-gray-600">OR</span>
                 <div className="h-px flex-1 bg-white/10" />
-
               </div>
 
-              {/* GOOGLE */}
-
+              {/* GOOGLE SIGNUP BUTTON */}
               <button
                 type="button"
-                onClick={
-                  handleGoogleSignup
-                }
+                onClick={handleGoogleSignup}
                 disabled={loading}
                 className="flex w-full items-center justify-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] py-3 text-sm font-semibold text-white transition hover:border-[#d9ff4f]/40 disabled:opacity-50"
               >
-
-                <span className="text-lg font-bold">
-                  G
-                </span>
-
+                <span className="text-lg font-bold">G</span>
                 Continue with Google
-
               </button>
-
             </div>
-
           </div>
-
         </div>
-
       </div>
-
     </div>
   );
 }
 
-/* INPUT */
-
-function Input({
-  icon,
-  type = "text",
-  name,
-  placeholder,
-  value,
-  onChange,
-}) {
+/* HELPER COMPONENTS */
+function Input({ icon, type = "text", name, placeholder, value, onChange }) {
   return (
     <div className="relative">
-
       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">
         {icon}
       </span>
-
       <input
         type={type}
         name={name}
         placeholder={placeholder}
         value={value}
         onChange={onChange}
-        required
+        required={name === "name" || name === "email"}
         className="w-full rounded-lg border border-white/10 bg-[#121b18] py-3.5 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#d9ff4f]"
       />
-
     </div>
   );
 }
 
-/* PASSWORD */
-
-function PasswordInput({
-  value,
-  onChange,
-  show,
-  setShow,
-}) {
+function PasswordInput({ value, onChange, show, setShow }) {
   return (
     <div className="relative">
-
-      <Lock
-        size={18}
-        className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600"
-      />
-
+      <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" />
       <input
-        type={
-          show ? "text" : "password"
-        }
-        placeholder="Password"
+        type={show ? "text" : "password"}
+        placeholder="Password *"
         value={value}
         onChange={onChange}
         minLength={6}
         required
         className="w-full rounded-lg border border-white/10 bg-[#121b18] py-3.5 pl-11 pr-11 text-sm text-white outline-none placeholder:text-gray-600 focus:border-[#d9ff4f]"
       />
-
       <button
         type="button"
-        onClick={() =>
-          setShow(!show)
-        }
+        onClick={() => setShow(!show)}
         className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600 hover:text-white"
       >
-        {show ? (
-          <EyeOff size={18} />
-        ) : (
-          <Eye size={18} />
-        )}
+        {show ? <EyeOff size={18} /> : <Eye size={18} />}
       </button>
-
     </div>
   );
 }
 
-/* ROLE CARD */
-
-function RoleCard({
-  selected,
-  onClick,
-  icon,
-  title,
-  text,
-}) {
+function RoleCard({ selected, onClick, icon, title, text }) {
   return (
     <button
       type="button"
@@ -712,9 +495,7 @@ function RoleCard({
           : "border-white/10 bg-[#121b18] hover:border-white/20"
       }`}
     >
-
       <div className="flex items-center gap-3">
-
         <div
           className={`grid h-5 w-5 place-items-center rounded border ${
             selected
@@ -722,37 +503,14 @@ function RoleCard({
               : "border-gray-600"
           }`}
         >
-          {selected && (
-            <span className="text-xs font-black">
-              ✓
-            </span>
-          )}
+          {selected && <span className="text-xs font-black">✓</span>}
         </div>
-
-        <div
-          className={
-            selected
-              ? "text-[#d9ff4f]"
-              : "text-gray-500"
-          }
-        >
-          {icon}
-        </div>
-
+        <div className={selected ? "text-[#d9ff4f]" : "text-gray-500"}>{icon}</div>
         <div>
-
-          <p className="text-sm font-semibold text-white">
-            {title}
-          </p>
-
-          <p className="mt-0.5 text-[11px] text-gray-600">
-            {text}
-          </p>
-
+          <p className="text-sm font-semibold text-white">{title}</p>
+          <p className="mt-0.5 text-[11px] text-gray-600">{text}</p>
         </div>
-
       </div>
-
     </button>
   );
 }

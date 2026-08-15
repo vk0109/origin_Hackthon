@@ -11,21 +11,20 @@ const express = require("express");
 const cors = require("cors");
 
 const connectDB = require("./config/db");
-
 const authRoutes = require("./routes/authRoutes");
 
 const app = express();
 
 app.use(
   cors({
-    origin: ["http://localhost:5175", "http://localhost:5173"],
+    origin: true,
     credentials: true,
   })
 );
 
 app.use(express.json());
 
-// Simple request logger to help debug the auth flow
+// Request logger for auth debugging
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
   next();
@@ -41,18 +40,19 @@ app.get("/", (req, res) => {
 
 app.use("/api/auth", authRoutes);
 
-// Fallback for unknown API routes - return JSON instead of default HTML
+// Fallback for unknown API routes - return JSON instead of HTML
 app.use((req, res, next) => {
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ message: 'API route not found' });
+  if (req.path.startsWith("/api/")) {
+    return res.status(404).json({ message: "API route not found" });
   }
   next();
 });
 
 // Generic error handler
 app.use((err, req, res, next) => {
-  console.error('Unhandled server error:', err);
-  res.status(500).json({ message: 'Server error' });
+  void next;
+  console.error("Unhandled server error:", err);
+  res.status(500).json({ message: "Server error" });
 });
 
 const PORT = process.env.PORT || 5000;

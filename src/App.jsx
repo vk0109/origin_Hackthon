@@ -14,10 +14,10 @@ import Reviews from "./components/Reviews";
 import CTA from "./components/CTA";
 import Footer from "./components/Footer";
 
-// Use fixed auth pages that include backend integration and proper tokens
-import Login from "./pages/LoginFinal";
-import Signup from "./pages/SignupFinal";
-import Profile from "./pages/ProfileFinal";
+// Canonical auth pages
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import Profile from "./pages/Profile";
 
 function App() {
   const [user, setUser] = useState(null);

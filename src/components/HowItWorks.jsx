@@ -103,7 +103,7 @@ function HowItWorks() {
 
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
 
-            {steps.map((step, index) => {
+            {steps.map((step) => {
               const Icon = step.icon;
 
               return (
