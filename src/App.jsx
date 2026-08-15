@@ -6,6 +6,7 @@ import HowItWorks from "./components/HowItWorks";
 import Resources from "./components/Resources";
 import CTA from "./components/CTA";
 import Footer from "./components/Footer";
+import Disasters from "./components/Disasters.jsx";
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Hero />
         <ImpactStats />
         <Mission />
+        <Disasters />
         <HowItWorks />
         <Resources />
         <CTA />
